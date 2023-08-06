@@ -67,7 +67,6 @@ impl Clone for Item {
 
 impl Item {
     pub fn draw (&self, term: &mut Stdout, col_row: (i16, i16)) {
-        
         for (char_row, row_vec) in self.chars.iter().enumerate() {
             for (char_col, term_char) in row_vec.iter().enumerate() {
                 term_char.draw(term, (char_col as i16 + col_row.0, char_row as i16 + col_row.1));
