@@ -16,6 +16,7 @@ enum Tool {
     BRUSH,
     ERASE,
     INK,
+    MOVE
 }
 
 #[derive(PartialEq)]
@@ -31,6 +32,7 @@ pub struct DrawTerm {
     cursor: Item,
     cursor_info: Item,
     color_selected: Color,
+    last_cursor_position: (u16, u16)
 }
 
 
@@ -45,7 +47,8 @@ impl DrawTerm {
         let cursor: Item = Item { name: "cursor".to_string(), offset: (width as i16-1, 0), chars: vec![vec![EMPTY_TERM_CHAR]] };
         let cursor_info: Item = Item {name: "cursor_info".to_string(), offset: (width as i16 - 7, height as i16-1), chars: vec![vec![EMPTY_TERM_CHAR]]};
         let color_selected: Color = Color::AnsiValue(0);
-        DrawTerm { screen, tool, config, cursor, cursor_info, color_selected}
+        let last_cursor_position: (u16, u16) = (0, 0);
+        DrawTerm { screen, tool, config, cursor, cursor_info, color_selected, last_cursor_position}
     }
     pub fn run(&mut self) {
         self._enter();
@@ -128,12 +131,18 @@ impl DrawTerm {
                 background_color: Color::Reset,
                 empty: false,
             },
+            Tool::MOVE => TermChar {
+                character: 'M',
+                foreground_color: Color::White,
+                background_color: Color::Reset,
+                empty: false,
+            },
         }
     }
     pub fn create_cursor_info_chars(&self, (col, row): (u16, u16)) -> Vec<Vec<TermChar>> {
         // make col and row //2 values
         let col: u16 = col/2;
-        let row: u16 = row/2;
+        let row: u16 = row;
         let cursor_info_str: String = format!("{:03} {:03}", col, row);
         let mut chars: Vec<TermChar> = Vec::new();
         for c in cursor_info_str.chars() {
@@ -186,7 +195,11 @@ impl EventHandlers for DrawTerm {
                                 if self.tool == Tool::ERASE {self.tool = Tool::BRUSH};
                                 self.draw_ansi_colors();
                                 return false
-                            }
+                            },
+                            'm' => {
+                                self.tool = Tool::MOVE;
+                                false
+                            },
                             _ => false,
                         }
                     },
@@ -197,11 +210,12 @@ impl EventHandlers for DrawTerm {
         }
     }
     fn on_mouse_event(&mut self, event: MouseEvent) -> bool {
-        let (col, row) = (event.column, event.row);
+        let (col, row) = (event.column.clone() & !(event.column%2), event.row.clone());
         self.screen.term.execute(MoveTo(col, row)).unwrap();
 
+
         let mut to_remove_bg: Vec<String> = Vec::new();        
-        let item_on_foreground = self.screen.layers[1].get_item_at_index((col, row));
+        let item_on_foreground = self.screen.layers[1].get_item_at_absolute((col, row));
         
         self.cursor.erase(&mut self.screen.term, (0,0));
         self.cursor.chars = vec![vec![self.cursor_term_char()]];
@@ -210,6 +224,7 @@ impl EventHandlers for DrawTerm {
         self.cursor_info.erase(&mut self.screen.term, (0,0));
         self.cursor_info.chars = self.create_cursor_info_chars((col, row));
         self.cursor_info.redraw(&mut self.screen.term, (0,0));
+
 
         match event.kind {
             event::MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(event::MouseButton::Left) => {
@@ -225,12 +240,12 @@ impl EventHandlers for DrawTerm {
 
                 match self.tool {
                     Tool::BRUSH => {
-                        let pixel: Item = Item {name: "pixel".to_string(), offset: ((col & !(self.screen.layers[0].offset.0 as u16+1%2)) as i16, row as i16), chars: Pixel{color: self.color_selected}.to_chars()};
+                        let pixel: Item = Item {name: "pixel".to_string(), offset: self.screen.layers[0].relative_position(col, row), chars: Pixel{color: self.color_selected}.to_chars()};
                         self.screen.layers[0].add_item(pixel.clone());
-                        pixel.redraw(&mut self.screen.term, (0,0)); // hack for pixels to not worry on 
+                        pixel.draw(&mut self.screen.term, (col as i16, row as i16));
                     },
                     Tool::ERASE => {
-                        let item: Option<&Item> = self.screen.layers[0].get_item_at_index((col & !(self.screen.layers[0].offset.0 as u16+1%2), row));
+                        let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
                         match item {
                             Some(item) => {
                                 item.erase(&mut self.screen.term, (0,0));
@@ -240,7 +255,7 @@ impl EventHandlers for DrawTerm {
                         }
                     },
                     Tool::INK => {
-                        let item: Option<&Item> = self.screen.layers[0].get_item_at_index((col & !(self.screen.layers[0].offset.0 as u16+1%2), row));
+                        let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
                         match item {
                             Some(item) => {
                                 self.color_selected = item.chars[0][0].background_color;
@@ -248,13 +263,20 @@ impl EventHandlers for DrawTerm {
                             },
                             None => {self.tool = Tool::ERASE}
                         }
-                    }
+                    },
+                    Tool::MOVE => {
+                        let distance_to_move =  ((col as i16 - self.last_cursor_position.0 as i16), row as i16 - self.last_cursor_position.1 as i16);
+                        self.screen.layers[0].erase(&mut self.screen.term);
+                        self.screen.layers[0].move_layer(&mut self.screen.term, distance_to_move);
+                        self.screen.layers[0].redraw(&mut self.screen.term);
+                    },
                     _ => {}
                 }
                 self.remove_items_from_bg(to_remove_bg);
             },
             _ => {}
-        }        
+        }
+        self.last_cursor_position = (col, row);
         false
     }
     fn on_resize_event(&mut self, width: u16, height: u16) -> bool {
