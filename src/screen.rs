@@ -40,6 +40,10 @@ impl TermChar {
         if col < 0 || row < 0 {
             return;
         }
+        let size = terminal::size().unwrap();
+        if col >= size.0 as i16  || row >= size.1 as i16  {
+            return;
+        }
         
         term.execute(cursor::MoveTo(col as u16, row as u16)).unwrap();
         term.execute(SetForegroundColor(self.foreground_color)).unwrap();

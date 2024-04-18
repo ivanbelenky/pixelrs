@@ -31,6 +31,7 @@ pub struct DrawTerm {
     config: Config,
     cursor: Item,
     cursor_info: Item,
+    resized: bool,
     color_selected: Color,
     last_cursor_position: (u16, u16)
 }
@@ -44,17 +45,19 @@ impl DrawTerm {
         let screen: Screen = Screen::new(vec![background, foreground]);
         let tool: Tool = Tool::BRUSH;
         let config: Config = Config::NONE;
+        
         let cursor: Item = Item { name: "cursor".to_string(), offset: (width as i16-1, 0), chars: vec![vec![EMPTY_TERM_CHAR]] };
         let cursor_info: Item = Item {name: "cursor_info".to_string(), offset: (width as i16 - 7, height as i16-1), chars: vec![vec![EMPTY_TERM_CHAR]]};
         let color_selected: Color = Color::AnsiValue(0);
         let last_cursor_position: (u16, u16) = (0, 0);
-        DrawTerm { screen, tool, config, cursor, cursor_info, color_selected, last_cursor_position}
+        let resized: bool = false;
+        DrawTerm { screen, tool, config, cursor, cursor_info, resized, color_selected, last_cursor_position}
     }
     pub fn run(&mut self) {
         self._enter();
         let mut exit = false;
         while !exit{
-            if event::poll(Duration::from_micros(100)).unwrap() {
+            if event::poll(Duration::from_micros(1000)).unwrap() {
                 match event::read().unwrap() {
                     event::Event::Key(event) => exit = self.on_key_event(event),
                     event::Event::Mouse(event) => exit = self.on_mouse_event(event),
@@ -213,6 +216,11 @@ impl EventHandlers for DrawTerm {
         let (col, row) = (event.column.clone() & !(event.column%2), event.row.clone());
         self.screen.term.execute(MoveTo(col, row)).unwrap();
 
+        if self.resized {
+            self.resized = false;
+            self.screen.layers[0].redraw(&mut self.screen.term);
+            self.screen.layers[1].redraw(&mut self.screen.term);       
+        }
 
         let mut to_remove_bg: Vec<String> = Vec::new();        
         let item_on_foreground = self.screen.layers[1].get_item_at_absolute((col, row));
@@ -280,8 +288,14 @@ impl EventHandlers for DrawTerm {
         false
     }
     fn on_resize_event(&mut self, width: u16, height: u16) -> bool {
-        //self.clear_screen();
-        //println!("Resized to {}x{}", width, height);
+        self.clear_screen();
+        
+        self.screen.width = width;
+        self.screen.height = height;
+        self.cursor_info.offset = (width as i16 - 7, height as i16-1);
+        self.cursor.offset = (width as i16-1, 0);
+        self.resized = true;
+        
         false
     }
 }
