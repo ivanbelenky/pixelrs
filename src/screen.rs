@@ -126,7 +126,7 @@ impl Layer {
 
     pub fn relative_position(&self, col: u16, row: u16) -> (i16, i16) {
         // let item_position_on_screen = (col & !(self.screen.layers[0].offset.0 as u16+1%2), row);
-        ((col as i16 - self.offset.0), row as i16 - self.offset.1)
+        return (col as i16 - self.offset.0, row as i16 - self.offset.1)
     }
 
     pub fn add_item(&mut self, item: Item) {
@@ -150,7 +150,7 @@ impl Layer {
         }
     }
 
-    pub fn move_layer(&mut self, term: &mut Stdout, displacement: (i16, i16)) {
+    pub fn move_layer(&mut self,  displacement: (i16, i16)) {
         self.offset = (self.offset.0 + displacement.0, self.offset.1 + displacement.1);
     }
 
@@ -162,8 +162,7 @@ impl Layer {
         indexes
     }
     pub fn get_item_at_absolute(&self, abs: (u16, u16)) -> Option<&Item> {
-        let casted_index = self.relative_position(abs.0, abs.1);
-
+        let casted_index = (abs.0 as i16 , abs.1 as i16 );
         for item in self.items.iter() {
             if item.get_filled_indexes(self.offset).contains(&casted_index) {
                 return Some(item);

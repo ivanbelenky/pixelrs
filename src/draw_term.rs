@@ -47,7 +47,7 @@ impl DrawTerm {
         let config: Config = Config::NONE;
         
         let cursor: Item = Item { name: "cursor".to_string(), offset: (width as i16-1, 0), chars: vec![vec![EMPTY_TERM_CHAR]] };
-        let cursor_info: Item = Item {name: "cursor_info".to_string(), offset: (width as i16 - 7, height as i16-1), chars: vec![vec![EMPTY_TERM_CHAR]]};
+        let cursor_info: Item = Item {name: "cursor_info".to_string(), offset: (width as i16 - 9, height as i16-1), chars: vec![vec![EMPTY_TERM_CHAR]]};
         let color_selected: Color = Color::AnsiValue(0);
         let last_cursor_position: (u16, u16) = (0, 0);
         let resized: bool = false;
@@ -57,7 +57,7 @@ impl DrawTerm {
         self._enter();
         let mut exit = false;
         while !exit{
-            if event::poll(Duration::from_micros(1000)).unwrap() {
+            if event::poll(Duration::ZERO).unwrap() {
                 match event::read().unwrap() {
                     event::Event::Key(event) => exit = self.on_key_event(event),
                     event::Event::Mouse(event) => exit = self.on_mouse_event(event),
@@ -100,16 +100,7 @@ impl DrawTerm {
             EMPTY_TERM_CHAR.draw(&mut self.screen.term, (c, self.screen.height as i16 - 1));
         }
     }
-    pub fn remove_items_from_bg(&self, to_remove: Vec<String>) -> Vec<Item> {
-        // remove items from background layer 
-        let mut items: Vec<Item> = Vec::new();
-        for item in &self.screen.layers[0].items {
-            if !to_remove.contains(&item.name) {
-                items.push(item.clone());
-            }
-        }
-        return items
-    }
+    
     pub fn cursor_term_char(&self) -> TermChar {
         match self.tool {
             Tool::BRUSH => { 
@@ -142,11 +133,11 @@ impl DrawTerm {
             },
         }
     }
-    pub fn create_cursor_info_chars(&self, (col, row): (u16, u16)) -> Vec<Vec<TermChar>> {
+    pub fn create_cursor_info_chars(&self, (col, row): (i16, i16)) -> Vec<Vec<TermChar>> {
         // make col and row //2 values
-        let col: u16 = col/2;
-        let row: u16 = row;
-        let cursor_info_str: String = format!("{:03} {:03}", col, row);
+        let col = col/2;
+        let row  = row;
+        let cursor_info_str: String = format!("{:04} {:04}", col, row);
         let mut chars: Vec<TermChar> = Vec::new();
         for c in cursor_info_str.chars() {
             chars.push(TermChar {
@@ -222,7 +213,6 @@ impl EventHandlers for DrawTerm {
             self.screen.layers[1].redraw(&mut self.screen.term);       
         }
 
-        let mut to_remove_bg: Vec<String> = Vec::new();        
         let item_on_foreground = self.screen.layers[1].get_item_at_absolute((col, row));
         
         self.cursor.erase(&mut self.screen.term, (0,0));
@@ -230,7 +220,7 @@ impl EventHandlers for DrawTerm {
         self.cursor.redraw(&mut self.screen.term, (0,0));
 
         self.cursor_info.erase(&mut self.screen.term, (0,0));
-        self.cursor_info.chars = self.create_cursor_info_chars((col, row));
+        self.cursor_info.chars = self.create_cursor_info_chars((col as i16 -self.screen.layers[0].offset.0 , row as i16-self.screen.layers[0].offset.1 ));
         self.cursor_info.redraw(&mut self.screen.term, (0,0));
 
 
@@ -256,8 +246,9 @@ impl EventHandlers for DrawTerm {
                         let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
                         match item {
                             Some(item) => {
-                                item.erase(&mut self.screen.term, (0,0));
-                                to_remove_bg.push(item.name.to_string());
+                                item.erase(&mut self.screen.term, self.screen.layers[0].offset);
+                                let items: Vec<Item> = self.screen.layers[0].items.clone();
+                                self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
                             },
                             None => {}
                         }
@@ -275,12 +266,11 @@ impl EventHandlers for DrawTerm {
                     Tool::MOVE => {
                         let distance_to_move =  ((col as i16 - self.last_cursor_position.0 as i16), row as i16 - self.last_cursor_position.1 as i16);
                         self.screen.layers[0].erase(&mut self.screen.term);
-                        self.screen.layers[0].move_layer(&mut self.screen.term, distance_to_move);
+                        self.screen.layers[0].move_layer(distance_to_move);
                         self.screen.layers[0].redraw(&mut self.screen.term);
                     },
                     _ => {}
                 }
-                self.remove_items_from_bg(to_remove_bg);
             },
             _ => {}
         }
@@ -292,7 +282,7 @@ impl EventHandlers for DrawTerm {
         
         self.screen.width = width;
         self.screen.height = height;
-        self.cursor_info.offset = (width as i16 - 7, height as i16-1);
+        self.cursor_info.offset = (width as i16 - 9, height as i16-1);
         self.cursor.offset = (width as i16-1, 0);
         self.resized = true;
         
