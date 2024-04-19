@@ -96,7 +96,6 @@ impl Item {
     }
     
     pub fn get_filled_indexes(&self, c_offset: (i16, i16)) -> Vec<(i16, i16)> {
-        // c_offset := container offset
         let mut indexes: Vec<(i16, i16)> = Vec::new();
         let f_offset: (i16, i16) = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1); //final offset
         for (row, row_vec) in self.chars.iter().enumerate() {
