@@ -18,6 +18,6 @@ $ cargo run
 <p align="center"><img width="50%" height="50%" src="assets/rustpx.png"/></p>
 
 ## TODO
-[ ] learn rust :p
-[ ] save feature
-[ ] zoom?
+- [ ] learn rust :p
+- [ ] save feature
+- [ ] zoom?
