@@ -4,6 +4,8 @@ A very simple and minimal `tty` inifinite pixel art editor written in `rust`
 
 - `B` brush
 - `E` erase
+- `I` ink tool
+- `A` text
 - `C` open colors
 - `M` move
 - `Q` quit
