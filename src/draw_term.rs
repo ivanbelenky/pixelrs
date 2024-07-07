@@ -67,6 +67,7 @@ impl DrawTerm {
                     event::Event::Resize(width, height) => exit = self.on_resize_event(width, height),
                     _ => {}
                 }
+                self.draw_layers()
             }
         }
         self._exit();
@@ -84,6 +85,9 @@ impl DrawTerm {
         terminal::disable_raw_mode().unwrap();
         
     }
+    pub fn draw_layers(&mut self) {
+        //
+    }
     pub fn clear_screen(&mut self) {
         self.screen.term.execute(terminal::Clear(terminal::ClearType::All)).unwrap();
         self.screen.term.flush().unwrap();
@@ -93,14 +97,19 @@ impl DrawTerm {
         for c in 0..16 {              
             let color_pixel: Item = Item {name: "color_selection_pixels".to_string(), offset: (2*c, self.screen.height as i16-1), chars: Pixel{color: Color::AnsiValue(c as u8)}.to_chars()};
             self.screen.layers[1].add_item(color_pixel.clone());
-            color_pixel.draw(&mut self.screen.term, (2*c, self.screen.height as i16-1));
+            // TODO, the line below should be replaced by basically pushing data to a buffer 2d buffer
+            // at first probably you are going to plot back again here, instead of replacing the 
+            // this function with just one that returns the buffer, or actually modifies it inplace + 
+            // returns it for the sake of who knows what.
+            color_pixel.draw(&mut self.screen.term, (2*c, self.screen.height as i16-1), self.screen.width, self.screen.height);
         }
+
     }
     pub fn erase_ansi_colors(&mut self) {
         self.config = Config::NONE;
         self.screen.layers[1].items.retain(|item| item.name != "color_selection_pixels");
         for c in 0..32 {
-            EMPTY_TERM_CHAR.draw(&mut self.screen.term, (c, self.screen.height as i16 - 1));
+            EMPTY_TERM_CHAR.draw(&mut self.screen.term, (c, self.screen.height as i16 - 1), self.screen.width, self.screen.height);
         }
     }
     
@@ -181,7 +190,7 @@ impl EventHandlers for DrawTerm {
                         chars: vec![vec![TermChar {character: c, foreground_color: self.color_selected, background_color: Color::Reset, empty: false}, EMPTY_TERM_CHAR]]
                     };
                     self.screen.layers[0].add_item(char.clone());
-                    char.draw(&mut self.screen.term, (self.last_cursor_position.0 as i16, self.last_cursor_position.1 as i16));
+                    char.draw(&mut self.screen.term, (self.last_cursor_position.0 as i16, self.last_cursor_position.1 as i16), self.screen.width, self.screen.height);
                     self.last_cursor_position = (self.last_cursor_position.0+2, self.last_cursor_position.1);
                     self.screen.term.execute(MoveTo(self.last_cursor_position.0, self.last_cursor_position.1)).unwrap();
                 },
@@ -194,7 +203,7 @@ impl EventHandlers for DrawTerm {
                     let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((self.last_cursor_position.0-2, self.last_cursor_position.1));
                     match item {
                         Some(item) => {
-                            item.erase(&mut self.screen.term, self.screen.layers[0].offset);
+                            item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
                             let items: Vec<Item> = self.screen.layers[0].items.clone();
                             self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
                             self.last_cursor_position = (self.last_cursor_position.0-2, self.last_cursor_position.1);
@@ -258,22 +267,12 @@ impl EventHandlers for DrawTerm {
 
         if self.resized {
             self.resized = false;
-            self.screen.layers[0].redraw(&mut self.screen.term);
-            self.screen.layers[1].redraw(&mut self.screen.term);       
+            self.screen.layers[0].redraw(&mut self.screen.term, self.screen.width, self.screen.height);
+            self.screen.layers[1].redraw(&mut self.screen.term, self.screen.width, self.screen.height);       
         }
 
         let item_on_foreground = self.screen.layers[1].get_item_at_absolute((col, row));
         
-        
-        self.cursor.erase(&mut self.screen.term, (0,0));
-        self.cursor.chars = vec![vec![self.cursor_term_char()]];
-        self.cursor.redraw(&mut self.screen.term, (0,0));
-
-        self.cursor_info.erase(&mut self.screen.term, (0,0));
-        self.cursor_info.chars = self.create_cursor_info_chars((col as i16 -self.screen.layers[0].offset.0 , row as i16-self.screen.layers[0].offset.1 ));
-        self.cursor_info.redraw(&mut self.screen.term, (0,0));
-
-
 
         match event.kind {
             event::MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(event::MouseButton::Left) => {
@@ -291,13 +290,13 @@ impl EventHandlers for DrawTerm {
                     Tool::BRUSH => {
                         let pixel: Item = Item {name: "pixel".to_string(), offset: self.screen.layers[0].relative_position(col, row), chars: Pixel{color: self.color_selected}.to_chars()};
                         self.screen.layers[0].add_item(pixel.clone());
-                        pixel.draw(&mut self.screen.term, (col as i16, row as i16));
+                        pixel.draw(&mut self.screen.term, (col as i16, row as i16), self.screen.width, self.screen.height);
                     },
                     Tool::ERASE => {
                         let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
                         match item {
                             Some(item) => {
-                                item.erase(&mut self.screen.term, self.screen.layers[0].offset);
+                                item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
                                 let items: Vec<Item> = self.screen.layers[0].items.clone();
                                 self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
                             },
@@ -316,9 +315,10 @@ impl EventHandlers for DrawTerm {
                     },
                     Tool::MOVE => {
                         let distance_to_move =  ((col as i16 - self.last_cursor_position.0 as i16), row as i16 - self.last_cursor_position.1 as i16);
-                        self.screen.layers[0].erase(&mut self.screen.term);
+                        self.screen.layers[0].erase(&mut self.screen.term, self.screen.width, self.screen.height);
                         self.screen.layers[0].move_layer(distance_to_move);
-                        self.screen.layers[0].redraw(&mut self.screen.term);
+                        self.screen.layers[0].draw_buffer(&mut self.screen.term, self.screen.width, self.screen.height);
+                        self.screen.layers[1].redraw(&mut self.screen.term, self.screen.width, self.screen.height);
                     },
                     Tool::TEXT => {
                         if !self.typing {
@@ -333,6 +333,15 @@ impl EventHandlers for DrawTerm {
             },
             _ => {}
         }
+
+        self.cursor.erase(&mut self.screen.term, (0,0), self.screen.width, self.screen.height);
+        self.cursor.chars = vec![vec![self.cursor_term_char()]];
+        self.cursor.redraw(&mut self.screen.term, (0,0), self.screen.width, self.screen.height);
+
+        self.cursor_info.erase(&mut self.screen.term, (0,0), self.screen.width, self.screen.height);
+        self.cursor_info.chars = self.create_cursor_info_chars((col as i16 -self.screen.layers[0].offset.0 , row as i16-self.screen.layers[0].offset.1 ));
+        self.cursor_info.redraw(&mut self.screen.term, (0,0), self.screen.width, self.screen.height);
+
         if !self.typing {
             self.last_cursor_position = (col, row);
         }

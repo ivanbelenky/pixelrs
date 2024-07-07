@@ -35,13 +35,12 @@ pub struct TermChar {
 }
 
 impl TermChar {
-    pub fn draw(&self, term: &mut Stdout, col_row: (i16, i16)) {
+    pub fn draw(&self, term: &mut Stdout, col_row: (i16, i16), width: u16, height: u16) {
         let (col, row) = col_row;
         if col < 0 || row < 0 {
             return;
         }
-        let size = terminal::size().unwrap();
-        if col >= size.0 as i16  || row >= size.1 as i16  {
+        if col >= width as i16 || row >= height as i16 {
             return;
         }
         
@@ -71,26 +70,45 @@ impl Clone for Item {
 
 
 impl Item {
-    pub fn draw (&self, term: &mut Stdout, col_row: (i16, i16)) {
+    // TODO: this should improve, I need to basically return buffers, containing a "string" made
+    // up of the characters that the Item is made of
+    pub fn draw (&self, term: &mut Stdout, col_row: (i16, i16), width: u16, height: u16) {
         for (char_row, row_vec) in self.chars.iter().enumerate() {
             for (char_col, term_char) in row_vec.iter().enumerate() {
-                term_char.draw(term, (char_col as i16 + col_row.0, char_row as i16 + col_row.1));
+                term_char.draw(term, (char_col as i16 + col_row.0, char_row as i16 + col_row.1), width, height)
             }
         }
     }
-    pub fn redraw(&self, term: &mut Stdout, c_offset: (i16, i16)) {
+    pub fn redraw(&self, term: &mut Stdout, c_offset: (i16, i16), width: u16, height: u16) {
         let f_offset = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1);
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, term_char) in row_vec.iter().enumerate() {
-                term_char.draw(term, (f_offset.0 + col as i16, f_offset.1 + row as i16));
+                term_char.draw(term, (f_offset.0 + col as i16, f_offset.1 + row as i16), width, height);
             }
         }
     }
 
-    pub fn erase(&self, term: &mut Stdout, c_offset: (i16, i16)) {
+    pub fn draw_buffer(&self, mut buffer: &mut Vec<Vec<String>>, c_offset: (i16, i16), width: u16, height: u16){
+        let f_offset: (i16, i16) = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1);
+        for (row, row_vec) in self.chars.iter().enumerate() {
+            for (col, term_char) in row_vec.iter().enumerate() {
+                let x = f_offset.0 + (col as i16);
+                let y = f_offset.1 + (row as i16);
+                //println!("{}-{}", x,y);
+                if x < 0 || y < 0 || y >= height as i16 || x >= width as i16 {
+                    continue;
+                }
+                if let Color::AnsiValue(c) = term_char.background_color {
+                    buffer[y as usize][x as usize] = format!("\x1b[48;5;{}m \x1b[49m", c)
+                }
+            }
+        }
+    }
+
+    pub fn erase(&self, term: &mut Stdout, c_offset: (i16, i16), width: u16, height: u16) {
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, _) in row_vec.iter().enumerate() {
-                EMPTY_TERM_CHAR.draw(term, (self.offset.0 + c_offset.0 + col as i16, self.offset.1 + c_offset.1 + row as i16));
+                EMPTY_TERM_CHAR.draw(term, (self.offset.0 + c_offset.0 + col as i16, self.offset.1 + c_offset.1 + row as i16), width, height);
             }
         }
     }
@@ -137,15 +155,29 @@ impl Layer {
         }
     }
 
-    pub fn erase(&self, term: &mut Stdout) {
+    pub fn erase(&self, term: &mut Stdout, width: u16, height: u16) {
         for item in self.items.iter() {
-            item.erase(term, self.offset);
+            item.erase(term, self.offset, width, height);
         }
     }
 
-    pub fn redraw(&mut self, term: &mut Stdout) {
+    pub fn buffer_to_string(&mut self, buffer: Vec<Vec<String>>) -> String {
+        buffer.into_iter().flatten().collect()
+    }
+
+    pub fn draw_buffer(&mut self, term: &mut Stdout, width: u16, height: u16){
+        let mut buffer: Vec<Vec<String>> = vec![vec![' '.to_string(); width as usize]; height as usize];
         for item in self.items.iter_mut() {
-            item.redraw(term, self.offset);
+            item.draw_buffer(&mut buffer, self.offset, width, height);
+        }
+        let layer_str: String = self.buffer_to_string(buffer);
+        term.execute(cursor::MoveTo(0 as u16, 0 as u16)).unwrap();
+        term.execute(Print(layer_str)).unwrap();
+    }   
+    
+    pub fn redraw(&mut self, term: &mut Stdout, width: u16, height: u16) {
+        for item in self.items.iter_mut() {
+            item.redraw(term, self.offset, width, height);
         }
     }
 
@@ -189,7 +221,7 @@ impl Screen {
     }
     fn redraw(&mut self) {
         for layer in self.layers.iter_mut() {
-            layer.redraw(&mut self.term);
+            layer.redraw(&mut self.term, self.width, self.height);
         }
     }
     fn first_filled_layer_at_index(&self, index: &(u16, u16)) -> Option<usize> {
