@@ -67,7 +67,6 @@ impl DrawTerm {
                     event::Event::Resize(width, height) => exit = self.on_resize_event(width, height),
                     _ => {}
                 }
-                self.draw_layers()
             }
         }
         self._exit();
@@ -85,9 +84,7 @@ impl DrawTerm {
         terminal::disable_raw_mode().unwrap();
         
     }
-    pub fn draw_layers(&mut self) {
-        //
-    }
+    
     pub fn clear_screen(&mut self) {
         self.screen.term.execute(terminal::Clear(terminal::ClearType::All)).unwrap();
         self.screen.term.flush().unwrap();
@@ -315,10 +312,8 @@ impl EventHandlers for DrawTerm {
                     },
                     Tool::MOVE => {
                         let distance_to_move =  ((col as i16 - self.last_cursor_position.0 as i16), row as i16 - self.last_cursor_position.1 as i16);
-                        self.screen.layers[0].erase(&mut self.screen.term, self.screen.width, self.screen.height);
                         self.screen.layers[0].move_layer(distance_to_move);
                         self.screen.layers[0].draw_buffer(&mut self.screen.term, self.screen.width, self.screen.height);
-                        self.screen.layers[1].redraw(&mut self.screen.term, self.screen.width, self.screen.height);
                     },
                     Tool::TEXT => {
                         if !self.typing {
