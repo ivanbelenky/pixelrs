@@ -13,17 +13,17 @@ use crate::constants::EMPTY_TERM_CHAR;
 
 #[derive(PartialEq)]
 enum Tool {
-    BRUSH,
-    ERASE,
-    INK,
-    MOVE,
-    TEXT
+    Brush,
+    Erase,
+    Ink,
+    Move,
+    Text
 }
 
 #[derive(PartialEq)]
 enum Config {
-    NONE,
-    COLORSELECTION
+    None,
+    Colorselection
 }
 
 pub struct DrawTerm {
@@ -45,8 +45,8 @@ impl DrawTerm {
         let foreground: Layer = Layer::new_empty("foreground".to_string(), width, height, (0, 0));
         let background: Layer = Layer::new_empty("background".to_string(), width, height, (0, 0));
         let screen: Screen = Screen::new(vec![background, foreground]);
-        let tool: Tool = Tool::BRUSH;
-        let config: Config = Config::NONE;
+        let tool: Tool = Tool::Brush;
+        let config: Config = Config::None;
         
         let cursor: Item = Item { name: "cursor".to_string(), offset: (width as i16-1, 0), chars: vec![vec![EMPTY_TERM_CHAR]] };
         let cursor_info: Item = Item {name: "cursor_info".to_string(), offset: (width as i16 - 9, height as i16-1), chars: vec![vec![EMPTY_TERM_CHAR]]};
@@ -90,7 +90,7 @@ impl DrawTerm {
         self.screen.term.flush().unwrap();
     }
     pub fn draw_ansi_colors(&mut self) { 
-        self.config = Config::COLORSELECTION;
+        self.config = Config::Colorselection;
         for c in 0..16 {              
             let color_pixel: Item = Item {name: "color_selection_pixels".to_string(), offset: (2*c, self.screen.height as i16-1), chars: Pixel{color: Color::AnsiValue(c as u8)}.to_chars()};
             self.screen.layers[1].add_item(color_pixel.clone());
@@ -103,7 +103,7 @@ impl DrawTerm {
 
     }
     pub fn erase_ansi_colors(&mut self) {
-        self.config = Config::NONE;
+        self.config = Config::None;
         self.screen.layers[1].items.retain(|item| item.name != "color_selection_pixels");
         for c in 0..32 {
             EMPTY_TERM_CHAR.draw(&mut self.screen.term, (c, self.screen.height as i16 - 1), self.screen.width, self.screen.height);
@@ -112,7 +112,7 @@ impl DrawTerm {
     
     pub fn cursor_term_char(&self) -> TermChar {
         match self.tool {
-            Tool::BRUSH => { 
+            Tool::Brush => { 
                 let mut fg_color = self.color_selected;
                 if self.color_selected == Color::AnsiValue(0){ fg_color = Color::White };    
                 TermChar {
@@ -122,25 +122,25 @@ impl DrawTerm {
                     empty: false,
                 }
             },
-            Tool::ERASE => TermChar {
+            Tool::Erase => TermChar {
                 character: 'E',
                 foreground_color: Color::White,
                 background_color: Color::Reset,
                 empty: false,
             },
-            Tool::INK => TermChar {
+            Tool::Ink => TermChar {
                 character: 'I',
                 foreground_color: Color::White,
                 background_color: Color::Reset,
                 empty: false,
             },
-            Tool::MOVE => TermChar {
+            Tool::Move => TermChar {
                 character: 'M',
                 foreground_color: Color::White,
                 background_color: Color::Reset,
                 empty: false,
             },
-            Tool::TEXT => TermChar {
+            Tool::Text => TermChar {
                 character: 'T',
                 foreground_color: Color::White,
                 background_color: Color::Reset,
@@ -151,7 +151,6 @@ impl DrawTerm {
     pub fn create_cursor_info_chars(&self, (col, row): (i16, i16)) -> Vec<Vec<TermChar>> {
         // make col and row //2 values
         let col = col/2;
-        let row  = row;
         let cursor_info_str: String = format!("{:04} {:04}", col, row);
         let mut chars: Vec<TermChar> = Vec::new();
         for c in cursor_info_str.chars() {
@@ -162,7 +161,7 @@ impl DrawTerm {
                 empty: false,
             });
         }
-        return vec![chars];
+        vec![chars]
     }
 
 }
@@ -178,7 +177,7 @@ pub trait EventHandlers {
 
 impl EventHandlers for DrawTerm {
     fn on_key_event(&mut self, event: KeyEvent) -> bool {
-        if self.typing == true {
+        if self.typing {
             match event.code {
                 KeyCode::Char(c) => {
                     let char: Item = Item {
@@ -193,20 +192,17 @@ impl EventHandlers for DrawTerm {
                 },
                 KeyCode::Enter | KeyCode::Esc => {
                     self.typing = false;
-                    self.tool = Tool::BRUSH;
+                    self.tool = Tool::Brush;
                     self.screen.term.execute(cursor::Hide).unwrap();
                 },
                 KeyCode::Backspace => {
                     let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((self.last_cursor_position.0-2, self.last_cursor_position.1));
-                    match item {
-                        Some(item) => {
-                            item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
-                            let items: Vec<Item> = self.screen.layers[0].items.clone();
-                            self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
-                            self.last_cursor_position = (self.last_cursor_position.0-2, self.last_cursor_position.1);
-                            self.screen.term.execute(MoveTo(self.last_cursor_position.0, self.last_cursor_position.1)).unwrap();
-                        },
-                        None => {}
+                    if let Some(item) = item {
+                        item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
+                        let items: Vec<Item> = self.screen.layers[0].items.clone();
+                        self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
+                        self.last_cursor_position = (self.last_cursor_position.0-2, self.last_cursor_position.1);
+                        self.screen.term.execute(MoveTo(self.last_cursor_position.0, self.last_cursor_position.1)).unwrap();
                     }
                 },
                 _ => {}
@@ -221,32 +217,32 @@ impl EventHandlers for DrawTerm {
                         match c {
                             'q' => true,
                             'e' => {
-                                self.tool = Tool::ERASE;
+                                self.tool = Tool::Erase;
                                 false
                             },
                             'b' => {
-                                self.tool = Tool::BRUSH;
+                                self.tool = Tool::Brush;
                                 false
                             },
                             'i' => {
-                                self.tool = Tool::INK;
+                                self.tool = Tool::Ink;
                                 false
                             }
                             'c' => {
-                                if self.config == Config::COLORSELECTION {
+                                if self.config == Config::Colorselection {
                                     self.erase_ansi_colors();
                                     return false;
                                 };
-                                if self.tool == Tool::ERASE {self.tool = Tool::BRUSH};
+                                if self.tool == Tool::Erase {self.tool = Tool::Brush};
                                 self.draw_ansi_colors();
-                                return false
+                                false
                             },
                             'm' => {
-                                self.tool = Tool::MOVE;
+                                self.tool = Tool::Move;
                                 false
                             },
                             'a' => {
-                                self.tool = Tool::TEXT;
+                                self.tool = Tool::Text;
                                 false
                             },
                             _ => false,
@@ -259,7 +255,7 @@ impl EventHandlers for DrawTerm {
         }
     }
     fn on_mouse_event(&mut self, event: MouseEvent) -> bool {
-        let (col, row) = (event.column.clone() & !(event.column%2), event.row.clone());
+        let (col, row) = (event.column & !(event.column%2), event.row);
         self.screen.term.execute(MoveTo(col, row)).unwrap();
 
         if self.resized {
@@ -284,38 +280,35 @@ impl EventHandlers for DrawTerm {
                 };
 
                 match self.tool {
-                    Tool::BRUSH => {
+                    Tool::Brush => {
                         let pixel: Item = Item {name: "pixel".to_string(), offset: self.screen.layers[0].relative_position(col, row), chars: Pixel{color: self.color_selected}.to_chars()};
                         self.screen.layers[0].add_item(pixel.clone());
                         pixel.draw(&mut self.screen.term, (col as i16, row as i16), self.screen.width, self.screen.height);
                     },
-                    Tool::ERASE => {
+                    Tool::Erase => {
                         let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
-                        match item {
-                            Some(item) => {
-                                item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
-                                let items: Vec<Item> = self.screen.layers[0].items.clone();
-                                self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
-                            },
-                            None => {}
+                        if let Some(item) = item {
+                            item.erase(&mut self.screen.term, self.screen.layers[0].offset, self.screen.width, self.screen.height);
+                            let items: Vec<Item> = self.screen.layers[0].items.clone();
+                            self.screen.layers[0].items = items.into_iter().filter(|i| i.offset != item.offset).collect();
                         }
                     },
-                    Tool::INK => {
+                    Tool::Ink => {
                         let item: Option<&Item> = self.screen.layers[0].get_item_at_absolute((col, row));
                         match item {
                             Some(item) => {
                                 self.color_selected = item.chars[0][0].background_color;
-                                self.tool = Tool::BRUSH;
+                                self.tool = Tool::Brush;
                             },
-                            None => {self.tool = Tool::ERASE}
+                            None => {self.tool = Tool::Erase}
                         }
                     },
-                    Tool::MOVE => {
+                    Tool::Move => {
                         let distance_to_move =  ((col as i16 - self.last_cursor_position.0 as i16), row as i16 - self.last_cursor_position.1 as i16);
                         self.screen.layers[0].move_layer(distance_to_move);
                         self.screen.layers[0].draw_buffer(&mut self.screen.term, self.screen.width, self.screen.height);
                     },
-                    Tool::TEXT => {
+                    Tool::Text => {
                         if !self.typing {
                             self.typing = true;
                             self.last_cursor_position = (col, row);
@@ -323,7 +316,6 @@ impl EventHandlers for DrawTerm {
                             self.screen.term.execute(MoveTo(col, row)).unwrap();
                         }  
                     },
-                    _ => {}
                 }
             },
             _ => {}

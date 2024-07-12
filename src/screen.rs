@@ -1,15 +1,16 @@
 use crossterm::{cursor, ExecutableCommand};
-use crossterm::terminal::{self as terminal, Clear, ClearType};
+use crossterm::terminal::{self as terminal};
 use crossterm::style::{Color, Print, SetBackgroundColor, SetForegroundColor};
-use crate::constants::{MIN_WIDTH, MIN_HEIGHT, EMPTY_TERM_CHAR};
+use crate::constants::EMPTY_TERM_CHAR;
 use std::io::Stdout;
-use std::io::{stdout, Write};
+use std::io::stdout;
 
 
 pub struct Pixel {
     pub color: Color,
 }
 
+#[allow(dead_code)]
 impl Pixel {
     pub fn new(color: Color) -> Pixel {
         Pixel { color }
@@ -88,7 +89,7 @@ impl Item {
         }
     }
 
-    pub fn draw_buffer(&self, mut buffer: &mut Vec<Vec<String>>, c_offset: (i16, i16), width: u16, height: u16){
+    pub fn draw_buffer(&self, buffer: &mut [Vec<String>], c_offset: (i16, i16), width: u16, height: u16){
         let f_offset: (i16, i16) = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1);
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, term_char) in row_vec.iter().enumerate() {
@@ -128,6 +129,7 @@ impl Item {
 }
 
 
+#[allow(dead_code)]
 pub struct Layer {
     pub name: String,
     pub width: u16,
@@ -136,6 +138,7 @@ pub struct Layer {
     pub items: Vec<Item>,
 }
 
+#[allow(dead_code)]
 impl Layer {
     pub fn new_empty(name: String, width: u16, height: u16, offset: (i16, i16)) -> Layer {
         Layer {name, width, height, offset, items: Vec::new()}
@@ -143,21 +146,16 @@ impl Layer {
 
     pub fn relative_position(&self, col: u16, row: u16) -> (i16, i16) {
         // let item_position_on_screen = (col & !(self.screen.layers[0].offset.0 as u16+1%2), row);
-        return (col as i16 - self.offset.0, row as i16 - self.offset.1)
+        (col as i16 - self.offset.0, row as i16 - self.offset.1)
     }
 
     pub fn add_item(&mut self, item: Item) {
         self.items.push(item);
     }
+    
     pub fn remove_item(&mut self, item: Option<&Item>) {
         if let Some(item) = item {
             self.items.retain(|x| x.name != item.name);
-        }
-    }
-
-    pub fn erase(&self, term: &mut Stdout, width: u16, height: u16) {
-        for item in self.items.iter() {
-            item.erase(term, self.offset, width, height);
         }
     }
 
@@ -171,7 +169,7 @@ impl Layer {
             item.draw_buffer(&mut buffer, self.offset, width, height);
         }
         let layer_str: String = self.buffer_to_string(buffer);
-        term.execute(cursor::MoveTo(0 as u16, 0 as u16)).unwrap();
+        term.execute(cursor::MoveTo(0, 0)).unwrap();
         term.execute(Print(layer_str)).unwrap();
     }   
     
@@ -194,12 +192,7 @@ impl Layer {
     }
     pub fn get_item_at_absolute(&self, abs: (u16, u16)) -> Option<&Item> {
         let casted_index = (abs.0 as i16 , abs.1 as i16 );
-        for item in self.items.iter() {
-            if item.get_filled_indexes(self.offset).contains(&casted_index) {
-                return Some(item);
-            }
-        }
-        None
+        self.items.iter().find(|&item| item.get_filled_indexes(self.offset).contains(&casted_index))
     }
 }
 
@@ -210,6 +203,7 @@ pub struct Screen {
     pub term: std::io::Stdout,
 }
 
+#[allow(dead_code)]
 impl Screen {
     pub fn new(layers: Vec<Layer>) -> Screen {
         let term = stdout();
