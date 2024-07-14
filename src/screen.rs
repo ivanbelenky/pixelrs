@@ -1,10 +1,9 @@
-use crossterm::{cursor, ExecutableCommand};
-use crossterm::terminal::{self as terminal};
-use crossterm::style::{Color, Print, SetBackgroundColor, SetForegroundColor};
 use crate::constants::EMPTY_TERM_CHAR;
-use std::io::Stdout;
+use crossterm::style::{Color, Print, SetBackgroundColor, SetForegroundColor};
+use crossterm::terminal::{self as terminal};
+use crossterm::{cursor, ExecutableCommand};
 use std::io::stdout;
-
+use std::io::Stdout;
 
 pub struct Pixel {
     pub color: Color,
@@ -26,7 +25,6 @@ impl Pixel {
     }
 }
 
-
 #[derive(Clone, Copy)]
 pub struct TermChar {
     pub character: char,
@@ -44,10 +42,13 @@ impl TermChar {
         if col >= width as i32 || row >= height as i32 {
             return;
         }
-        
-        term.execute(cursor::MoveTo(col as u16, row as u16)).unwrap();
-        term.execute(SetForegroundColor(self.foreground_color)).unwrap();
-        term.execute(SetBackgroundColor(self.background_color)).unwrap();
+
+        term.execute(cursor::MoveTo(col as u16, row as u16))
+            .unwrap();
+        term.execute(SetForegroundColor(self.foreground_color))
+            .unwrap();
+        term.execute(SetBackgroundColor(self.background_color))
+            .unwrap();
         term.execute(Print(self.character.to_string())).unwrap();
     }
 }
@@ -57,7 +58,7 @@ pub struct Item {
     // items are contained in a layer and they have an offset with respect to it.
     // similar position but it highlights that is relative to the container (0,0)
     // offset is container_relative_xy
-    pub offset: (i32, i32), 
+    pub offset: (i32, i32),
     pub chars: Vec<Vec<TermChar>>,
 }
 
@@ -72,14 +73,18 @@ impl Clone for Item {
     }
 }
 
-
 impl Item {
     // TODO: this should improve, I need to basically return buffers, containing a "string" made
     // up of the characters that the Item is made of
-    pub fn draw (&self, term: &mut Stdout, col_row: (i32, i32), width: u16, height: u16) {
+    pub fn draw(&self, term: &mut Stdout, col_row: (i32, i32), width: u16, height: u16) {
         for (char_row, row_vec) in self.chars.iter().enumerate() {
             for (char_col, term_char) in row_vec.iter().enumerate() {
-                term_char.draw(term, (char_col as i32 + col_row.0, char_row as i32 + col_row.1), width, height)
+                term_char.draw(
+                    term,
+                    (char_col as i32 + col_row.0, char_row as i32 + col_row.1),
+                    width,
+                    height,
+                )
             }
         }
     }
@@ -87,12 +92,23 @@ impl Item {
         let f_offset = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1);
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, term_char) in row_vec.iter().enumerate() {
-                term_char.draw(term, (f_offset.0 + col as i32, f_offset.1 + row as i32), width, height);
+                term_char.draw(
+                    term,
+                    (f_offset.0 + col as i32, f_offset.1 + row as i32),
+                    width,
+                    height,
+                );
             }
         }
     }
 
-    pub fn draw_buffer(&self, buffer: &mut [Vec<String>], c_offset: (i32, i32), width: u16, height: u16){
+    pub fn draw_buffer(
+        &self,
+        buffer: &mut [Vec<String>],
+        c_offset: (i32, i32),
+        width: u16,
+        height: u16,
+    ) {
         let f_offset: (i32, i32) = (self.offset.0 + c_offset.0, self.offset.1 + c_offset.1);
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, term_char) in row_vec.iter().enumerate() {
@@ -130,16 +146,16 @@ impl Item {
         for (row, row_vec) in self.chars.iter().enumerate() {
             for (col, _) in row_vec.iter().enumerate() {
                 EMPTY_TERM_CHAR.draw(
-                    term, 
+                    term,
                     // item_relative_to_container_layer + container_relative_to_screen
                     (x0 + col as i32, y0 + row as i32),
-                    width, 
-                    height
+                    width,
+                    height,
                 );
             }
         }
     }
-    
+
     pub fn get_filled_indexes(&self, c_offset: (i32, i32)) -> Vec<(i32, i32)> {
         let mut indexes: Vec<(i32, i32)> = Vec::new();
         let (x0, y0) = self.screen_position(vec![c_offset]);
@@ -154,7 +170,6 @@ impl Item {
     }
 }
 
-
 #[allow(dead_code)]
 pub struct Layer {
     pub name: String,
@@ -167,7 +182,13 @@ pub struct Layer {
 #[allow(dead_code)]
 impl Layer {
     pub fn new_empty(name: String, width: u16, height: u16, offset: (i32, i32)) -> Layer {
-        Layer {name, width, height, offset, items: Vec::new()}
+        Layer {
+            name,
+            width,
+            height,
+            offset,
+            items: Vec::new(),
+        }
     }
 
     // relative position of (col, row) to the self
@@ -178,7 +199,7 @@ impl Layer {
     pub fn add_item(&mut self, item: Item) {
         self.items.push(item);
     }
-    
+
     pub fn remove_item(&mut self, item: Option<&Item>) {
         if let Some(item) = item {
             self.items.retain(|x| x.name != item.name);
@@ -189,24 +210,28 @@ impl Layer {
         buffer.into_iter().flatten().collect()
     }
 
-    pub fn draw_buffer(&mut self, term: &mut Stdout, width: u16, height: u16){
-        let mut buffer: Vec<Vec<String>> = vec![vec![' '.to_string(); width as usize]; height as usize];
+    pub fn draw_buffer(&mut self, term: &mut Stdout, width: u16, height: u16) {
+        let mut buffer: Vec<Vec<String>> =
+            vec![vec![' '.to_string(); width as usize]; height as usize];
         for item in self.items.iter_mut() {
             item.draw_buffer(&mut buffer, self.offset, width, height);
         }
         let layer_str: String = self.buffer_to_string(buffer);
         term.execute(cursor::MoveTo(0, 0)).unwrap();
         term.execute(Print(layer_str)).unwrap();
-    }   
-    
+    }
+
     pub fn redraw(&mut self, term: &mut Stdout, width: u16, height: u16) {
         for item in self.items.iter_mut() {
             item.redraw(term, self.offset, width, height);
         }
     }
 
-    pub fn move_layer(&mut self,  displacement: (i32, i32)) {
-        self.offset = (self.offset.0 + displacement.0, self.offset.1 + displacement.1);
+    pub fn move_layer(&mut self, displacement: (i32, i32)) {
+        self.offset = (
+            self.offset.0 + displacement.0,
+            self.offset.1 + displacement.1,
+        );
     }
 
     pub fn get_filled_indexes(&self) -> Vec<(i32, i32)> {
@@ -217,11 +242,11 @@ impl Layer {
         indexes
     }
     pub fn get_item_at_absolute(&self, (abs_x, abs_y): (i32, i32)) -> Option<&Item> {
-        self.items
-            .iter()
-            .find(|&item| item.get_filled_indexes(self.offset).contains(&(abs_x, abs_y)))
+        self.items.iter().find(|&item| {
+            item.get_filled_indexes(self.offset)
+                .contains(&(abs_x, abs_y))
+        })
     }
-
 }
 
 pub struct Screen {
@@ -236,7 +261,12 @@ impl Screen {
     pub fn new(layers: Vec<Layer>) -> Screen {
         let term = stdout();
         let (width, height): (u16, u16) = terminal::size().unwrap();
-        Screen {width, height, layers, term}
+        Screen {
+            width,
+            height,
+            layers,
+            term,
+        }
     }
     fn add_layer(&mut self, layer: Layer) {
         self.layers.push(layer);
@@ -255,7 +285,7 @@ impl Screen {
         }
         None
     }
-    
+
     fn first_item_at_col_row(&self, (col, row): (u16, u16)) -> Option<&Item> {
         for layer in self.layers.iter() {
             if let Some(item) = layer.get_item_at_absolute((col as i32, row as i32)) {
